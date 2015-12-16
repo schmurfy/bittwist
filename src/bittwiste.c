@@ -36,6 +36,8 @@ u_char *payload_opt = NULL;     /* payload in hex digits *NOTFREED* */
 u_short payload_len_opt = 0;    /* length of payload in bytes */
 int linktype_opt = -1;          /* pcap preamble link type field, -1 -> no override */
 
+int loopback_mode = 0;          /* if 1 replace first two bytes with loopback IPV4 */
+
 /* header specific options *NOTFREED* */
 struct ethopt *ethopt;          /* Ethernet options */
 struct arpopt *arpopt;          /* ARP options */
@@ -63,7 +65,7 @@ int main(int argc, char **argv)
         program_name = argv[0];
 
     /* process general options */
-    while ((c = getopt(argc, argv, "I:O:L:X:CM:D:R:S:T:h")) != -1) {
+    while ((c = getopt(argc, argv, "I:O:L:X:CZM:D:R:S:T:h")) != -1) {
         switch (c) {
             case 'I':
                 infile = optarg;
@@ -133,6 +135,10 @@ int main(int argc, char **argv)
                 if (start_oset_opt == 0 || end_oset_opt == 0 || (start_oset_opt > end_oset_opt))
                     error("invalid offset specification");
                 break;
+            case 'Z': // replace first two bytes with loopbak header
+                loopback_mode = 1;
+                break;
+            
             case 'R': /* range: 5-21 */
                 str = strdup(optarg);
                 if (str == NULL)
@@ -741,6 +747,13 @@ void parse_trace(char *infile, char *outfile)
                     /* write pcap generic header */
                     if (fwrite(header, PCAP_HDR_LEN, 1, fp_outfile) != 1)
                         error("fwrite(): error writing %s", outfile);
+                    
+                    if( loopback_mode ){
+                        pkt_data[end_o]    = 0x02;
+                        pkt_data[end_o+1]  = 0x00;
+                        pkt_data[end_o+2]  = 0x00;
+                        pkt_data[end_o+3]  = 0x00;
+                    }
 
                     for (i = 0; i < start_oset_opt - 1; i++) {
                         if (fputc(pkt_data[i], fp_outfile) == EOF)
@@ -2376,6 +2389,7 @@ void usage(void)
         " -M linktype     Replace the 'linktype' stored in the pcap file header.\n"
         "                 Typically, value for 'linktype' is 1 for Ethernet.\n"
         "                 Example: -M 12 (for raw IP), -M 51 (for PPPoE)\n"
+        " -Z              replace first 4 bytes by loopback header\n"
         " -D offset       Delete the specified byte 'offset' from each packet.\n"
         "                 First byte (starting from link layer header) starts from 1.\n"
         "                 -L, -X, -C and -T flag are ignored if -D flag is specified.\n"
